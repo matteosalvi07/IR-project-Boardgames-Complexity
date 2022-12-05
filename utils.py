@@ -1,4 +1,5 @@
 from spacy_syllables import SpacySyllables
+import spacy_fastlang
 import spacy
 import pandas as pd
 from PyPDF2 import PdfReader
@@ -14,29 +15,44 @@ from string import punctuation
 import nltk
 from collections import defaultdict
 
+
 config = helper.read_config()
 
 sw = stopwords.words('english')
 
+#use data in config fiòe
 mypath = config['Directory']['mypath']
-
 bggxmlapi2 = config['API']['bggxmlapi2']
 bggxmlapi = config['API']['bggxmlapi']
-
 difficult_word=[option.strip() for option in config.get('WORDS', 'difficult_word').split(',')]
 easy_word=[option.strip() for option in config.get('WORDS', 'easy_word').split(',')]
 
-
-
+#loaded the model for nlp with spacy and the pipelines
 nlp = spacy.load('en_core_web_sm')
 nlp.add_pipe("syllables", after="tagger")
+nlp.add_pipe("language_detector")
 
-
-def read_files():
+def read_files(): #to read file in a directory
     return [f for f in listdir(mypath) if isfile(join(mypath, f))]
 
+def read_rolebook_pdf(file): #read the content of a pdf to create an istance of a rulebook
+    reader = PdfReader(mypath + file)
+    filename = file
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text() + "\n"
 
-def process_text(corpus):
+    corpus = [sentence for sentence in nlp(text).sents]
+    df = process_text(corpus)
+    num_sent = len(text)
+    num_word = df.query('alpha==True').shape[0]
+    num_complex_word = df.query('alpha==True&syll_count>=3').shape[0]
+    pos = df.groupby(["pos"]).size()
+    syn_analysis = synt_analysis(pos)
+    return rb.Rulebook(filename, text, reader.getNumPages(), num_sent, num_word, num_complex_word, syn_analysis)
+
+
+def process_text(corpus): #process rulebook content to the sintactic analysis
     tokens = []
     for sentence in corpus:
         for token in sentence:
@@ -48,7 +64,7 @@ def process_text(corpus):
     return pd.DataFrame(tokens)
 
 
-def synt_analysis(pos):
+def synt_analysis(pos): #metric from syntactic analysis
     aggettivi = pos['ADJ'] + pos['NUM']
     nomi = pos['NOUN'] + pos['PROPN']
     pronomi = pos['PRON']
@@ -70,24 +86,8 @@ def synt_analysis(pos):
     return met
 
 
-def read_rolebook_pdf(file):
-    reader = PdfReader(mypath + file)
-    filename = file
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
 
-    corpus = [sentence for sentence in nlp(text).sents]
-    df = process_text(corpus)
-    num_sent = len(text)
-    num_word = df.query('alpha==True').shape[0]
-    num_complex_word = df.query('alpha==True&syll_count>=3').shape[0]
-    pos = df.groupby(["pos"]).size()
-    syn_analysis = synt_analysis(pos)
-    return rb.Rulebook(filename, text, reader.getNumPages(), num_sent, num_word, num_complex_word, syn_analysis)
-
-
-def create_boardgame(rulebook):
+def create_boardgame(rulebook): #use bgg api's to download data of each boardgame from the rulebook
     req_for_id = bggxmlapi2 + "search?query=" + rulebook.filename.split(".")[0] + "&type=boardgame&exact=1"
     res_for_id = requests.get(req_for_id)
     root_for_id = et.fromstring(res_for_id.text)
@@ -102,17 +102,22 @@ def create_boardgame(rulebook):
 
     for comment in game.findall("./comment"):
         comments.append(comment.text)
+    eng_comments=select_english_comments(comments)
+    score=analyze_comments(eng_comments)
 
-    score=analyze_comments(comments)
-
-    return bg.BoardGame(name.text, comments, weight.text, len(expansions), rulebook,score)
-
-
+    return bg.BoardGame(name.text, eng_comments, weight.text, len(expansions), rulebook,score)
 
 
+def select_english_comments(comments): #to select only comments in english
+    eng_comm=[]
+    for c in comments:
+        doc = nlp(c)
+        eng_comm.append({"comm": c, "lang": doc._.language})
+    return [x["comm"] for x in eng_comm if x["lang"]=="en" ]
 
 
-def analyze_comments(comments):
+
+def analyze_comments(comments): #creation of the metric from users' comments
     I = defaultdict(set)
     nltk_tokenize = lambda text: [x.lower() for x in nltk.word_tokenize(text) if x not in punctuation]
     corpus = list(enumerate(comments))
