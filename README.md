@@ -71,13 +71,6 @@ nlp.add_pipe("syllables", after="tagger")
 nlp.add_pipe("language_detector")
 ```
 
-    Warning : `load_model` does not return WordVectorModel or SupervisedModel any more, but a `FastText` object which is very similar.
-    
-
-
-
-
-    <spacy_fastlang.LanguageDetector at 0x21fabf09bb0>
 
 
 
