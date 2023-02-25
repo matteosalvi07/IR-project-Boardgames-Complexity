@@ -20,7 +20,7 @@ config = helper.read_config()
 
 sw = stopwords.words('english')
 
-#use data in config fiòe
+#use data in config file
 mypath = config['Directory']['mypath']
 bggxmlapi2 = config['API']['bggxmlapi2']
 bggxmlapi = config['API']['bggxmlapi']
