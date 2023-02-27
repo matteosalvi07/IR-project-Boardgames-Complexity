@@ -1,6 +1,6 @@
 # Complexity in Boardgames
 
-#### In this project my aim is to find metric for the ranking of Boardgames based on complexity
+#### In this project my aim is to find metric for the ranking of Boardgames based on complexity as project of Information Retrieval exam.
 ## Class definitions
 
 
